@@ -1,7 +1,8 @@
 #![feature(rustc_private)]
 #![feature(plugin, decl_macro)]
-#![plugin(rocket_codegen)]
+//#![plugin(rocket_codegen)]
 #![feature(fnbox)]
+#![feature(proc_macro_hygiene)]
 
 extern crate byteorder;
 extern crate clap;
@@ -13,6 +14,7 @@ extern crate protobuf;
 extern crate raft;
 extern crate rand;
 extern crate reqwest;
+#[macro_use]
 extern crate rocket;
 extern crate rocksdb;
 extern crate serde;
