@@ -1,15 +1,14 @@
 use std::sync::Arc;
-use std::collections::HashMap;
 
-use protobuf::{Message, MessageStatic};
-use rocksdb::{DBIterator, ReadOptions, Writable, DB};
 use byteorder::{BigEndian, ByteOrder};
-use serde::{Deserialize, Serialize};
+use protobuf::Message;
+use rocksdb::{DBIterator, ReadOptions, Writable, DB};
+use serde::Serialize;
 use serde_json;
 
-use keys::*;
+use crate::keys::*;
 
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Serialize, Deserialize, Default, Debug)]
 pub struct Row {
     pub key: Vec<u8>,
     pub value: Vec<u8>,
@@ -45,7 +44,7 @@ pub fn get_u64(db: &Arc<DB>, key: &[u8]) -> Option<u64> {
 
 pub fn get_msg<M>(db: &Arc<DB>, key: &[u8]) -> Option<M>
 where
-    M: Message + MessageStatic,
+    M: Message,
 {
     let value = db.get(key).unwrap();
 
@@ -87,6 +86,7 @@ where
     }
 }
 
+#[allow(dead_code)]
 pub fn seek(db: &Arc<DB>, start_key: &[u8]) -> Option<(Vec<u8>, Vec<u8>)> {
     let mut opts = ReadOptions::new();
     opts.set_iterate_lower_bound(start_key);

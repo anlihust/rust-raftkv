@@ -1,23 +1,26 @@
-use std::sync::Arc;
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
+use crossbeam_channel::{self, Sender};
+use protobuf::Message;
+use raft::eraftpb::Message as RaftMessage;
+use rand::{self, Rng};
 use rocket::config::{Config, Environment};
 use rocket::http::Status;
-use rocket::{self, State};
 use rocket::response::status::{Custom, NotFound};
-use protobuf::{Message, MessageStatic};
-use raft::eraftpb::Message as RaftMessage;
-use crossbeam_channel::{self, Sender};
+use rocket::{self, State};
 use rocksdb::DB;
-use rand::{self, Rng};
 
-use node::*;
-use transport::*;
-use keys::*;
-use util::*;
+use super::Addr;
+use crate::keys::*;
+use crate::node::*;
+use crate::raft_service;
+use crate::transport::*;
+use crate::util::*;
 use rocket::Data;
+use std::io::Read;
 
 pub struct RaftServer {
     sender: Sender<Msg>,
@@ -31,12 +34,14 @@ impl RaftServer {
 
         let (c, r) = crossbeam_channel::unbounded();
 
-        self.sender.send(Msg::Propose {
-            request: req,
-            cb: Box::new(move |resp| {
-                c.send(resp).unwrap();
-            }),
-        });
+        self.sender
+            .send(Msg::Propose {
+                request: req,
+                cb: Box::new(move |resp| {
+                    c.send(resp).unwrap();
+                }),
+            })
+            .unwrap();
 
         if let Ok(r) = r.recv_timeout(Duration::from_secs(3)) {
             return r;
@@ -153,30 +158,43 @@ fn raft_post(state: State<RaftServer>, value: Data) -> Result<(), Status> {
     let s = state;
 
     let mut m = RaftMessage::new();
-    m.merge_from_bytes(&value.peek()).unwrap();
+    let mut buf = Vec::new();
+    let mut stream = value.open();
+    stream.read_to_end(&mut buf).unwrap();
+    m.merge_from_bytes(&buf).unwrap();
 
-    s.sender.send(Msg::Raft(m));
+    s.sender.send(Msg::Raft(m)).unwrap();
 
     Ok(())
 }
 
-pub fn run_raft_server(port: u16, id: u64, db: Arc<DB>, nodes: HashMap<u64, String>) {
+pub fn run_raft_server(id: u64, db: Arc<DB>, nodes: HashMap<u64, Addr>) {
+    let addr = nodes.get(&id).unwrap();
+
     let cfg = Config::build(Environment::Staging)
         .address("0.0.0.0")
-        .port(port)
+        .port(addr.http_port)
         .workers(4)
         .finalize()
         .unwrap();
 
     let (sender, receiver) = crossbeam_channel::unbounded();
     let mut trans = Transport::new(sender.clone());
-    trans.start(nodes);
+    trans.start(nodes.clone());
 
     let db1 = db.clone();
     thread::spawn(move || {
         let node = Node::new(id, db1, trans);
         run_node(node, receiver);
     });
+    let ip_port: Vec<&str> = addr.raft_addr.split(":").collect();
+    let rpc_port = ip_port[1].parse::<u16>().unwrap();
+    let grpc = raft_service::RaftService {
+        sender: sender.clone(),
+        ip: "0.0.0.0".to_string(),
+        port: rpc_port,
+    };
+    grpc.start();
 
     let s = RaftServer {
         sender: sender,

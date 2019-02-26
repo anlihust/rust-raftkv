@@ -20,22 +20,30 @@ extern crate rocksdb;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
+extern crate futures;
 extern crate serde_json;
 
-use std::sync::Arc;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use clap::{App, Arg};
 use rocksdb::DB;
 
 mod http;
 mod keys;
-mod storage;
-mod util;
 mod node;
+mod raft_service;
+mod rpc;
+mod storage;
 mod transport;
+mod util;
 
 use http::*;
+#[derive(Clone)]
+pub struct Addr {
+    http_port: u16,
+    raft_addr: String,
+}
 
 fn main() {
     env_logger::init();
@@ -83,25 +91,28 @@ fn main() {
     let cluster = matches.value_of("cluster").unwrap();
     let node_addrs = parse_cluster(cluster);
 
-    let addr = node_addrs.get(&id).unwrap().clone();
     let nodes = node_addrs.keys().cloned().collect::<Vec<u64>>();
     storage::try_init_cluster(&db, id, &nodes);
 
-    let items: Vec<&str> = addr.split(":").collect();
-    let port = items[1].parse::<u16>().unwrap();
-
-    error!("start server {}, listen {}", id, port);
-    run_raft_server(port, id, db, node_addrs);
+    run_raft_server(id, db, node_addrs);
 }
 
-fn parse_cluster(cluster: &str) -> HashMap<u64, String> {
+fn parse_cluster(cluster: &str) -> HashMap<u64, Addr> {
     let mut m = HashMap::new();
     let items: Vec<&str> = cluster.split(",").collect();
     for item in items {
         let v: Vec<&str> = item.split("=").collect();
         let id = v[0].parse::<u64>().unwrap();
-        m.insert(id, v[1].to_string());
+        let addr: Vec<&str> = v[1].split(":").collect();
+        let http_port = addr[2].parse::<u16>().unwrap();
+        let raft_addr = format!("{}:{}", addr[0], addr[1]);
+        m.insert(
+            id,
+            Addr {
+                http_port,
+                raft_addr,
+            },
+        );
     }
-
     m
 }

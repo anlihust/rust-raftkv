@@ -1,23 +1,21 @@
 use std::boxed::FnBox;
-use std::time::{Duration, Instant};
-use std::sync::Arc;
 use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use crossbeam_channel::{Receiver, RecvTimeoutError};
 use raft::eraftpb::{EntryType, Message as RaftMessage};
 use raft::{self, Config, RawNode, SnapshotStatus, Storage as RaftStorage};
 use rocksdb::{Writable, WriteBatch, WriteOptions, DB};
-use serde::{Deserialize, Serialize};
-use serde_json;
 
-use util::*;
-use storage::*;
-use keys::*;
-use transport::*;
+use crate::keys::*;
+use crate::storage::*;
+use crate::transport::*;
+use crate::util::*;
 
 // op: read 1, write 2, delete 3.
 // op: status 128
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Serialize, Deserialize, Default, Debug)]
 pub struct Request {
     pub id: u64,
     pub op: u32,
@@ -82,7 +80,7 @@ impl Node {
             ..Default::default()
         };
 
-        let r = RawNode::new(&cfg, storage, &[]).unwrap();
+        let r = RawNode::new(&cfg, storage, vec![]).unwrap();
 
         Node {
             tag: format!("[{}]", id),
@@ -116,14 +114,17 @@ impl Node {
 
     pub fn on_msg(&mut self, msg: Msg) {
         match msg {
-            Msg::Raft(m) => self.r.step(m).unwrap(),
+            Msg::Raft(m) => {
+                self.r.step(m).unwrap()
+            }
             Msg::Propose { request, cb } => {
                 if request.op == 128 {
                     self.handle_status(request, cb);
                     return;
                 }
 
-                if self.r.raft.leader_id != self.id || self.cbs.contains_key(&request.id) {
+                //if self.r.raft.leader_id != self.id || self.cbs.contains_key(&request.id) {
+                if self.cbs.contains_key(&request.id) {
                     cb(Response {
                         id: request.id,
                         ok: false,
@@ -134,7 +135,7 @@ impl Node {
                 }
 
                 let data = serde_json::to_vec(&request).unwrap();
-                self.r.propose(data, false).unwrap();
+                self.r.propose(vec![], data).unwrap();
                 self.cbs.insert(request.id, cb);
             }
             Msg::ReportUnreachable(id) => self.r.report_unreachable(id),
@@ -255,7 +256,7 @@ impl Node {
 
 pub fn run_node(mut node: Node, ch: Receiver<Msg>) {
     let mut t = Instant::now();
-    let d = Duration::from_millis(100);
+    let d = Duration::from_millis(10);
     loop {
         for _ in 0..4096 {
             match ch.recv_timeout(d) {

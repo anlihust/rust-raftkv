@@ -1,0 +1,15 @@
+syntax = "proto3";
+package raft;
+
+service raft{
+    rpc send(Req) returns (Resp){}
+}
+
+message Req{
+    bytes data = 1;
+}
+
+message Resp{
+    int32 code = 1;
+
+}

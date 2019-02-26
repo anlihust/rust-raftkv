@@ -2,26 +2,31 @@
 name = "raftkv"
 version = "0.1.0"
 authors = ["siddontang <siddontang@gmail.com>"]
+edition="2018"
+
+[build-dependencies]
+protoc-grpcio="0.3"
+protobuf = "2.0"
+grpcio-compiler="0.4"
+protobuf-codegen = "2.0"
 
 [dependencies]
-raft = "0.1"
+raft = "0.4"
 log = "0.4"
-env_logger = "0.5.5"
+env_logger = "0.6"
 clap = "2.31.1"
 rocket = "0.4"
-rocket_codegen = "0.4"
-protobuf = "1.4"
+protobuf = "2.0"
 byteorder = "0.5"
 serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1.0"
-crossbeam-channel = "0.1"
-reqwest = "0.8.5"
-rand = "0.4"
+futures = "0.1"
+crossbeam-channel = "0.3"
+failure="0.1"
+reqwest = {version="0.9",default-features = false}
+rand = "0.6"
 rocksdb={git = "https://github.com/pingcap/rust-rocksdb.git",rev="b127863a82fcf7784d5697261207df827f6c74a0"}
 
-#[dependencies.rocksdb]
-#git = "https://github.com/pingcap/rust-rocksdb.git"
+grpcio="0.4"
 
-#[replace]
-#"protobuf:1.4.1" = { git = "https://github.com/stepancheg/rust-protobuf.git" }

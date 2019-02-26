@@ -1,18 +1,17 @@
 use std::sync::Arc;
 
-use raft::eraftpb::{ConfState, Entry, HardState, Snapshot};
-use raft::{self, Error as RaftError, RaftState, Ready, Result as RaftResult,
-           Storage as RaftStorage, StorageError};
-use rocksdb::{Writable, WriteBatch, WriteOptions, DB};
 use protobuf::Message;
-use serde::{Deserialize, Serialize};
-use serde_json;
+use raft::eraftpb::{ConfState, Entry, Snapshot};
+use raft::{
+    self, Error as RaftError, RaftState, Result as RaftResult, Storage as RaftStorage, StorageError,
+};
+use rocksdb::{Writable, WriteBatch, WriteOptions, DB};
 
-use util::*;
-use keys::*;
+use crate::keys::*;
+use crate::util::*;
 
 pub struct Storage {
-    tag: String,
+    _tag: String,
     pub id: u64,
     pub db: Arc<DB>,
     truncated_state: TruncatedState,
@@ -31,7 +30,7 @@ impl Storage {
         let conf = get_msg(&db, RAFT_CONF_STATE_KEY).unwrap();
 
         Storage {
-            tag: format!("[{}]", id),
+            _tag: format!("[{}]", id),
             id: id,
             truncated_state: truncated_state,
             last_index: last_log.get_index(),
@@ -191,6 +190,8 @@ impl RaftStorage for Storage {
                 .unwrap()
                 .get_term()
         };
+        dbg!(&idx);
+        dbg!(&term);
         let mut snapshot = Snapshot::new();
         snapshot.mut_metadata().set_index(idx);
         snapshot.mut_metadata().set_term(term);
@@ -221,7 +222,7 @@ impl RaftStorage for Storage {
 
 pub fn get_last_log(db: &Arc<DB>) -> Option<Entry> {
     if let Some((key, value)) = seek_for_prev(db, &raft_log_key(u64::max_value())) {
-        if let Some(id) = decode_raft_log_key(&key) {
+        if let Some(_id) = decode_raft_log_key(&key) {
             let mut m = Entry::new();
             m.merge_from_bytes(&value).unwrap();
             return Some(m);
