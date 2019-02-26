@@ -65,7 +65,7 @@ fn main() {
         .arg(
             Arg::with_name("cluster")
                 .long("cluster")
-                .value_name("1=127.0.0.1:20171,2=127.0.0.1:20172")
+                .value_name("1=127.0.0.1:20171:8081,2=127.0.0.1:20172:8082,3=127.0.0.1:20173:8083")
                 .help("Cluster configuration")
                 .required(true)
                 .takes_value(true),
