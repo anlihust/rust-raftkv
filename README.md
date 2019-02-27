@@ -16,17 +16,17 @@ goreman start
 
 ```bash
 # Get status of a server, we can know the leader from status
-curl http://127.0.0.1:20171/status
+curl http://127.0.0.1:8081/status
 
 # Send the request to leader
 
 # Put abc = 124
-curl http://127.0.0.1:20173/kv/abc -d 123
+curl http://127.0.0.1:8083/kv/abc -d 123
 # Get abc 
-curl http://127.0.0.1:20173/kv/abc
+curl http://127.0.0.1:8083/kv/abc
 # Delete abc
-curl http://127.0.0.1:20173/kv/abc -x DELETE
+curl http://127.0.0.1:8083/kv/abc -x DELETE
 
 # Get abc locally, not through Raft 
-curl http://127.0.0.1:20173/local_kv/abc
+curl http://127.0.0.1:8083/local_kv/abc
 ```

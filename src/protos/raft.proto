@@ -3,6 +3,7 @@ package raft;
 
 service raft{
     rpc send(Req) returns (Resp){}
+    rpc conf_change(ConfChangeReq) returns (Resp){}
 }
 
 message Req{
@@ -11,5 +12,17 @@ message Req{
 
 message Resp{
     int32 code = 1;
-
 }
+enum ConfChangeType {
+    AddNode    = 0;
+    RemoveNode = 1;
+    AddLearnerNode = 2;
+}
+
+message ConfChangeReq {
+    uint64 id = 1;
+    ConfChangeType change_type = 2;
+    uint64 node_id = 3;
+    bytes context = 4;
+}
+

@@ -179,7 +179,7 @@ pub fn run_raft_server(id: u64, db: Arc<DB>, nodes: HashMap<u64, Addr>) {
         .unwrap();
 
     let (sender, receiver) = crossbeam_channel::unbounded();
-    let mut trans = Transport::new(sender.clone());
+    let mut trans = Transport::new(sender.clone(), id);
     trans.start(nodes.clone());
 
     let db1 = db.clone();

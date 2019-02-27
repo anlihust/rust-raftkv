@@ -18,18 +18,24 @@ use crate::rpc::raft_grpc::RaftClient;
 pub struct Transport {
     sender: Sender<Msg>,
     node_chs: HashMap<u64, Sender<RaftMessage>>,
+    id: u64,
 }
 
 impl Transport {
-    pub fn new(sender: Sender<Msg>) -> Transport {
+    pub fn new(sender: Sender<Msg>, id: u64) -> Transport {
         Transport {
             sender: sender,
             node_chs: HashMap::new(),
+            id,
         }
     }
 
     pub fn start(&mut self, node_addrs: HashMap<u64, Addr>) {
         for (id, addr) in node_addrs.iter() {
+            //skip self
+            if self.id.eq(id) {
+                continue;
+            }
             let (s, r) = unbounded();
             self.node_chs.insert(*id, s);
 
@@ -40,6 +46,26 @@ impl Transport {
                 on_transport(r, id, addr, sender);
             });
         }
+    }
+    pub fn add_peer(&mut self, id: u64, addr: &str) {
+        //skip self
+        if id == self.id {
+            return;
+        }
+        let (s, r) = unbounded();
+        self.node_chs.insert(id, s);
+
+        let sender = self.sender.clone();
+        let addr = addr.to_string();
+        thread::spawn(move || {
+            on_transport(r, id, addr, sender);
+        });
+    }
+    pub fn remove_peer(&mut self, id: u64) {
+        self.node_chs.remove(&id);
+    }
+    pub fn remove_all(&mut self) {
+        self.node_chs.clear();
     }
 
     pub fn send(&self, id: u64, msg: RaftMessage) {

@@ -1,10 +1,14 @@
 use std::boxed::FnBox;
 use std::collections::HashMap;
+use std::str;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crossbeam_channel::{Receiver, RecvTimeoutError};
+use protobuf::parse_from_bytes;
+use raft::eraftpb::{ConfChange, ConfChangeType};
 use raft::eraftpb::{EntryType, Message as RaftMessage};
+use raft::Error as RaftError;
 use raft::{self, Config, RawNode, SnapshotStatus, Storage as RaftStorage};
 use rocksdb::{Writable, WriteBatch, WriteOptions, DB};
 
@@ -47,6 +51,9 @@ pub enum Msg {
     Propose {
         request: Request,
         cb: RequestCallback,
+    },
+    ProposeConf {
+        cc: ConfChange,
     },
     Raft(RaftMessage),
     ReportUnreachable(u64),
@@ -114,9 +121,16 @@ impl Node {
 
     pub fn on_msg(&mut self, msg: Msg) {
         match msg {
-            Msg::Raft(m) => {
-                self.r.step(m).unwrap()
-            }
+            Msg::Raft(m) => match self.r.step(m.clone()) {
+                Ok(_) => {}
+                Err(RaftError::StepPeerNotFound) => {
+                    error!("received invalid raft msg,{}", raftError::StepPeerNotFound);
+                }
+                Err(e) => {
+                    error!("raft step error");
+                    panic!(e);
+                }
+            },
             Msg::Propose { request, cb } => {
                 if request.op == 128 {
                     self.handle_status(request, cb);
@@ -137,6 +151,9 @@ impl Node {
                 let data = serde_json::to_vec(&request).unwrap();
                 self.r.propose(vec![], data).unwrap();
                 self.cbs.insert(request.id, cb);
+            }
+            Msg::ProposeConf { cc } => {
+                self.r.propose_conf_change(vec![], cc).unwrap();
             }
             Msg::ReportUnreachable(id) => self.r.report_unreachable(id),
             Msg::ReportSnapshot { id, status } => self.r.report_snapshot(id, status),
@@ -208,9 +225,29 @@ impl Node {
                     continue;
                 }
 
-                if entry.get_entry_type() == EntryType::EntryNormal {
-                    let request: Request = serde_json::from_slice(entry.get_data()).unwrap();
-                    self.on_request(request);
+                match entry.get_entry_type() {
+                    EntryType::EntryNormal => {
+                        let request: Request = serde_json::from_slice(entry.get_data()).unwrap();
+                        self.on_request(request);
+                    }
+                    EntryType::EntryConfChange => {
+                        let cc = parse_from_bytes::<ConfChange>(entry.get_data()).unwrap();
+                        self.r.apply_conf_change(&cc);
+
+                        match cc.change_type {
+                            ConfChangeType::AddNode => {
+                                let addr = str::from_utf8(cc.context.as_slice()).unwrap();
+                                self.trans.add_peer(cc.node_id, addr);
+                            }
+                            ConfChangeType::RemoveNode => {
+                                if cc.node_id == self.id && self.r.raft.leader_id == self.id {
+                                    self.trans.remove_all();
+                                }
+                                self.trans.remove_peer(cc.node_id);
+                            }
+                            ConfChangeType::AddLearnerNode => {}
+                        }
+                    }
                 }
             }
 

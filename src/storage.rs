@@ -190,8 +190,6 @@ impl RaftStorage for Storage {
                 .unwrap()
                 .get_term()
         };
-        dbg!(&idx);
-        dbg!(&term);
         let mut snapshot = Snapshot::new();
         snapshot.mut_metadata().set_index(idx);
         snapshot.mut_metadata().set_term(term);

@@ -11,8 +11,10 @@ use raft::eraftpb::Message as RaftMessage;
 
 use crate::rpc::raft::*;
 use crate::rpc::raft_grpc::{create_raft, Raft};
+use raft::eraftpb::ConfChange as RaftConfChange;
 
 use super::node::Msg;
+use raft::eraftpb::ConfChangeType as RaftConfChangeType;
 
 pub struct RaftService {
     pub sender: Sender<Msg>,
@@ -56,6 +58,31 @@ impl Raft for RaftController {
         m.merge_from_bytes(req.data.as_slice()).unwrap();
 
         let _todo = self.sender.send(Msg::Raft(m));
+        let mut resp = Resp::new();
+        resp.set_code(0);
+        let f = sink
+            .success(resp)
+            .map_err(move |e| error!("failed to reply {:?}: {:?}", req, e));
+        ctx.spawn(f)
+    }
+
+    fn conf_change(&mut self, ctx: RpcContext, req: ConfChangeReq, sink: UnarySink<Resp>) {
+        let mut conf = RaftConfChange::new();
+        match req.change_type {
+            ConfChangeType::AddNode => {
+                conf.set_change_type(RaftConfChangeType::AddNode);
+            }
+            ConfChangeType::RemoveNode => {
+                conf.set_change_type(RaftConfChangeType::RemoveNode);
+            }
+            ConfChangeType::AddLearnerNode => {
+                conf.set_change_type(RaftConfChangeType::AddLearnerNode);
+            }
+        }
+        conf.set_id(req.get_id());
+        conf.set_node_id(req.get_node_id());
+        conf.set_context(req.get_context().to_vec());
+        let _todo = self.sender.send(Msg::ProposeConf { cc: conf });
         let mut resp = Resp::new();
         resp.set_code(0);
         let f = sink
